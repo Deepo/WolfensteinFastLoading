@@ -46,7 +46,7 @@
 // video", com_waitForSavegames' default (0xe44a1c). idCommonLocal::Init reads the cvar the same
 // way (0x12e5da). Its Init2 (0x1650b0) differs: with the cvar set it still plays the video during
 // "common" while the cvar bink_dontfree is set (its default), but marks it to end with the load
-// and doesn't wait for it, so the logo would show while "common" loads and stop when it's done:
+// and doesn't wait for it, so the logo shows while "common" loads and stops when it's done:
 //
 //   0x16512a  lea   rbx, [rip+...]          ; "bink/loadvideo_pc_xboxone.bik"
 //   0x165131  xor   r14d, r14d
@@ -55,12 +55,12 @@
 //   0x165139  cmp   [bink_dontfree], r14d
 //   0x165140  cmove rbx, r14                ; no video only if bink_dontfree is 0
 //
-// With bink_dontfree the render system keeps the Bink textures of the first video it plays, and
-// refuses any later video of other dimensions ("does not match dimensions of previously played
-// video"); the logo makes that first video a 1920x1080 one. Every video The Old Blood ships is
-// 1920x1080, so here SkipIntroVideo also makes the cmove a plain `mov rbx, r14` (and a nop): with
-// the cvar set there is no video at all, as in The New Order, and the first loading video creates
-// the textures instead.
+// With bink_dontfree the render system keeps the Bink textures of the first video it plays for
+// every later one (The New Order's bink_dontfree defaults to 0), so the logo has to play here:
+// textures that a chapter's loading video creates during a map load don't survive the next level
+// change, and the next video draws solid green. TOBFastLoading 1.0.0 also turned the cmove into
+// `mov rbx, r14` (no logo at all) and had exactly that bug. Init2 is left alone now; logo_cut.cpp
+// stops the logo as soon as it has started instead.
 //
 // The Old Blood also has warning screens before its main menu (a photosensitivity warning and an
 // auto-save notice; TNO has none). Its own switch is the cvar skipInitialWarningScreens ("Skip
@@ -179,18 +179,6 @@ namespace IntroSkip
     constexpr std::uintptr_t kNameTOB = 0xE44A38;  // "com_skipIntroVideo"
     constexpr std::uintptr_t kCVarTOB = 0x1823290;
     static_assert(kZeroTOB - (kInitTOB + kDispOffset + 4) == 0x2E7FA2);  // the lea's disp above
-    constexpr std::uintptr_t kLogoTOB = 0x16512A;  // Init2's choice of the video, above
-    constexpr std::uint8_t kLogoTOBBytes[] = {
-        0x48, 0x8D, 0x1D, 0xDF, 0x03, 0xCF, 0x00,  // lea   rbx, [rip+0xcf03df]  ("bink/loadvideo_pc_xboxone.bik")
-        0x45, 0x33, 0xF6,                          // xor   r14d, r14d
-        0x40, 0x84, 0xF6,                          // test  sil, sil
-        0x74, 0x0B,                                // je    0x165144
-        0x44, 0x39, 0x35, 0x18, 0xFD, 0xDB, 0x01,  // cmp   [bink_dontfree], r14d
-        0x49, 0x0F, 0x44, 0xDE,                    // cmove rbx, r14
-    };
-    constexpr std::size_t kLogoOffsetTOB = 0x16;                         // the cmove, at 0x165140
-    constexpr std::uint8_t kNoLogo[] = {0x49, 0x8B, 0xDE, 0x90};       // mov rbx, r14; nop
-    static_assert(sizeof(kLogoTOBBytes) == kLogoOffsetTOB + sizeof(kNoLogo));
 
     // The Old Blood, Game Pass (2021-04-14): Epic's shape.
     constexpr std::uint32_t kTimeDateStampTOBGP = 0x60770B00;
@@ -214,16 +202,6 @@ namespace IntroSkip
     constexpr std::uintptr_t kNameTOBGP = 0xC9B070;  // "com_skipIntroVideo"
     constexpr std::uintptr_t kCVarTOBGP = 0x157F580;
     static_assert(kZeroTOBGP - (kInitTOBGP + kDispOffset2021 + 4) == 0xC60692);
-    constexpr std::uintptr_t kLogoTOBGP = 0x174689;
-    constexpr std::uint8_t kLogoTOBGPBytes[] = {
-        0x48, 0x8D, 0x1D, 0xF8, 0x69, 0xB3, 0x00,  // lea   rbx, [rip+0xb369f8]  ("bink/loadvideo_pc_xboxone.bik")
-        0x45, 0x33, 0xF6,                          // xor   r14d, r14d
-        0x40, 0x84, 0xF6,                          // test  sil, sil
-        0x74, 0x0B,                                // je    0x1746a3
-        0x44, 0x39, 0x35, 0xE9, 0x7A, 0xB2, 0x01,  // cmp   [bink_dontfree], r14d
-        0x49, 0x0F, 0x44, 0xDE,                    // cmove rbx, r14
-    };
-    static_assert(sizeof(kLogoTOBGPBytes) == kLogoOffsetTOB + sizeof(kNoLogo));
 
     struct Build
     {
@@ -233,20 +211,14 @@ namespace IntroSkip
         std::size_t dispOffset;
         std::uintptr_t zero, one, name;  // the strings "0", "1", "com_skipIntroVideo"
         std::uintptr_t cvar;
-        // The Old Blood's Init2: the code that chooses the logo video, and where kNoLogo goes.
-        std::uintptr_t logo = 0;
-        std::span<const std::uint8_t> logoBytes = {};
-        std::size_t logoOffset = 0;
     };
     constexpr Build kBuilds[] = {
         {kTimeDateStamp, kInit, kInitBytes, kDispOffset, kZero, kOne, kName, kCVar},
         {kTimeDateStamp2021, kInit2021, kInit2021Bytes, kDispOffset2021, kZero2021, kOne2021, kName2021, kCVar2021},
         {kTimeDateStamp2021GP, kInit2021GP, kInit2021GPBytes, kDispOffset2021, kZero2021GP, kOne2021GP, kName2021GP,
          kCVar2021GP},
-        {kTimeDateStampTOB, kInitTOB, kInitTOBBytes, kDispOffset, kZeroTOB, kOneTOB, kNameTOB, kCVarTOB, kLogoTOB,
-         kLogoTOBBytes, kLogoOffsetTOB},
-        {kTimeDateStampTOBGP, kInitTOBGP, kInitTOBGPBytes, kDispOffset2021, kZeroTOBGP, kOneTOBGP, kNameTOBGP, kCVarTOBGP,
-         kLogoTOBGP, kLogoTOBGPBytes, kLogoOffsetTOB},
+        {kTimeDateStampTOB, kInitTOB, kInitTOBBytes, kDispOffset, kZeroTOB, kOneTOB, kNameTOB, kCVarTOB},
+        {kTimeDateStampTOBGP, kInitTOBGP, kInitTOBGPBytes, kDispOffset2021, kZeroTOBGP, kOneTOBGP, kNameTOBGP, kCVarTOBGP},
     };
     constexpr std::size_t kMaxInit = 96;
     static_assert(sizeof(kInitBytes) <= kMaxInit && sizeof(kInit2021Bytes) <= kMaxInit &&
@@ -378,12 +350,6 @@ namespace IntroSkip
                      dispEnd + disp, b->zero);
             return Result::UnknownBuild;
         }
-        // The Old Blood: Init2's choice of the logo video must be the analysed code.
-        if (b->logo && std::memcmp(base + b->logo, b->logoBytes.data(), b->logoBytes.size()) != 0) {
-            LOG_WARN("{}: the logo video's choice in Init2 at 0x{:x} differs from the analysed build ({}): changing "
-                     "nothing.", t.what, b->logo, Hex(base + b->logo, b->logoBytes.size()));
-            return Result::UnknownBuild;
-        }
 
         // Not built yet? Then its memory (.bss) is still all zero.
         for (std::size_t i = 0; i < kCVarSize; ++i) {
@@ -397,15 +363,6 @@ namespace IntroSkip
         if (!WriteCode(t.what, base + b->init + b->dispOffset, &patchedDisp, sizeof(patchedDisp))) return Result::Failed;
         LOG_INFO("Patched 0x{:x}: {} starts as 1 instead of 0, as with +{} 1 ({}).", b->init + b->dispOffset, t.cvar,
                  t.cvar, t.effect);
-        if (b->logo) {
-            if (!WriteCode(t.what, base + b->logo + b->logoOffset, kNoLogo, sizeof(kNoLogo))) {
-                // All or nothing: the default goes back to "0".
-                WriteCode(t.what, base + b->init + b->dispOffset, &originalDisp, sizeof(originalDisp));
-                return Result::Failed;
-            }
-            LOG_INFO("Patched 0x{:x}: with {} set, Init2 plays no logo video at all (it played one while \"common\" "
-                     "loaded whenever bink_dontfree is set).", b->logo + b->logoOffset, t.cvar);
-        }
         return Result::Patched;
     }
 

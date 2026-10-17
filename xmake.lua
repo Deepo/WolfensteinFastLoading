@@ -61,8 +61,8 @@ target(name)
 -- "Wolfenstein The Old Blood - Fast Loading" by Deepo on Nexus Mods.
 -- src/tobfix (DllMain for WolfOldBlood_x64.exe, its switches, its version info) and the same four
 -- loading modules, whose tables have rows for The Old Blood's GOG/Steam and Game Pass exes, plus
--- quit_fix (FastQuit, The Old Blood only); each switchable in TOBFastLoading.ini. Loaded by
--- Ultimate ASI Loader as winmm.dll.
+-- logo_cut (the start-up logo) and quit_fix (FastQuit), The Old Blood only; each switchable in
+-- TOBFastLoading.ini. Loaded by Ultimate ASI Loader as winmm.dll.
 
 target("TOBFastLoading")
     set_kind("shared")
@@ -73,7 +73,7 @@ target("TOBFastLoading")
     add_headerfiles("src/tobfix/*.h", "src/*.h")
     add_files("src/tobfix/*.cpp", "src/tobfix/version.rc",
               "src/read_wait_fix.cpp", "src/preload_wait_fix.cpp", "src/load_prompt.cpp", "src/intro_skip.cpp",
-              "src/quit_fix.cpp",
+              "src/logo_cut.cpp", "src/quit_fix.cpp",
               "src/patch_result.cpp", "src/config.cpp", "src/logger.cpp", "external/safetyhook/src/**.cpp")
     add_deps("zydis")
 

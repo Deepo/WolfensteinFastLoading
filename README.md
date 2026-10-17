@@ -9,8 +9,8 @@ installation and support are on Nexus Mods:
   https://www.nexusmods.com/wolfensteintheoldblood/mods/11
 
 The two share their loading modules (`src/*.cpp`); each has its own DllMain, switches and version
-information, in `src/loadfix` (The New Order) and `src/tobfix` (The Old Blood). `src/quit_fix.cpp`
-is The Old Blood only. The ini files are in `config/`.
+information, in `src/loadfix` (The New Order) and `src/tobfix` (The Old Blood). `src/logo_cut.cpp`
+and `src/quit_fix.cpp` are The Old Blood only. The ini files are in `config/`.
 
 Building needs Visual Studio 2026 (MSVC) and xmake:
 

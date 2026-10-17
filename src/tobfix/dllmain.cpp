@@ -5,6 +5,7 @@
 #include "preload_wait_fix.h"
 #include "load_prompt.h"
 #include "intro_skip.h"
+#include "logo_cut.h"
 #include "quit_fix.h"
 
 // ---------------------------------------------------------------------------
@@ -22,8 +23,10 @@
 //    preload with Sleep(100): a fixed 100 ms per load. 1 byte: it polls every 1 ms.
 // 3. AutoContinue (load_prompt.cpp): after the load, the game waits for "press X". A hook in that
 //    wait loop does what the press does, unless a loading cutscene plays.
-// 4. SkipIntroVideo (intro_skip.cpp): com_skipIntroVideo starts as 1, and Init2 plays no video
-//    with it, so there is no start-up logo video (~30 s).
+// 4. SkipIntroVideo (intro_skip.cpp): com_skipIntroVideo starts as 1, so the start-up logo video
+//    (~30 s) no longer holds the game. Init2 still starts the logo while "common" loads (that
+//    makes the textures every later video needs); a hook stops it at once, before a frame of it
+//    is shown (logo_cut.cpp).
 // 5. SkipWarningScreens (intro_skip.cpp, The Old Blood only): skipInitialWarningScreens starts as
 //    1, so the photosensitivity warning and the auto-save notice before the main menu are skipped.
 // 6. FastQuit (quit_fix.cpp, The Old Blood only): at exit the game blanked its texture caches page
@@ -33,8 +36,8 @@
 // Loaded by Ultimate ASI Loader as winmm.dll (the exe imports WINMM), which loads *.asi from
 // the game folder at start-up, before the game's own start-up code. Each part is switchable in
 // TOBFastLoading.ini next to the plugin; all of them are set up once, here in DllMain. Afterwards
-// only SmartWait (on the reading threads) and the hook (on the main thread while a load screen
-// waits) run. Files: the ini (read) and the log, <game>\TOBFastLoading.log (previous run:
+// only SmartWait (on the reading threads) and the two hooks (on the main thread while a load
+// screen waits; on the loading thread when a load starts a video) run. Files: the ini (read) and the log, <game>\TOBFastLoading.log (previous run:
 // .prev.log). Any other build of the game is left untouched; the log says which one it saw.
 // ---------------------------------------------------------------------------
 
@@ -104,8 +107,13 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
                 LOG_INFO("AutoContinue: off in the ini, nothing changed");
         });
         Step("SkipIntroVideo", [&] {
-            if (Config::SkipIntroVideo)
-                LOG_INFO("SkipIntroVideo: {}", Patch::ToString(IntroSkip::Apply(exe)));
+            if (Config::SkipIntroVideo) {
+                const Patch::Result r = IntroSkip::Apply(exe);
+                LOG_INFO("SkipIntroVideo: {}", Patch::ToString(r));
+                // Only with the cvar set: without it Init2 plays the logo to the end and waits for it.
+                if (r == Patch::Result::Patched || r == Patch::Result::AlreadyPatched)
+                    LOG_INFO("SkipIntroVideo, logo: {}", Patch::ToString(LogoCut::Install(exe)));
+            }
             else
                 LOG_INFO("SkipIntroVideo: off in the ini, nothing changed");
         });
